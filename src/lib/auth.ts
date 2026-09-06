@@ -8,7 +8,8 @@ import { authConfig } from "@/lib/auth.config";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
-  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
+  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || "botadi-studio-secret-key-32-chars-minimum",
+  trustHost: true,
   providers: [
     CredentialsProvider({
       name: "Credentials",
