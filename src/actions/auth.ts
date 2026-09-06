@@ -32,6 +32,25 @@ export async function loginUser(formData: { email: string; password: string }): 
       return { success: false, error: "Incorrect password. Please try again." };
     }
 
+    // Ensure environment URLs have https:// protocol to prevent "Invalid URL" crash in Vercel
+    const sanitize = (url?: string) => {
+      if (!url) return undefined;
+      const trimmed = url.trim();
+      if (!trimmed) return undefined;
+      return trimmed.startsWith("http://") || trimmed.startsWith("https://") ? trimmed : `https://${trimmed}`;
+    };
+    if (process.env.AUTH_URL) process.env.AUTH_URL = sanitize(process.env.AUTH_URL);
+    if (process.env.NEXTAUTH_URL) process.env.NEXTAUTH_URL = sanitize(process.env.NEXTAUTH_URL);
+
+    if (process.env.VERCEL) {
+      const vercelHost = process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL;
+      if (vercelHost && (!process.env.NEXTAUTH_URL || process.env.NEXTAUTH_URL.includes("localhost"))) {
+        const cleanUrl = `https://${vercelHost.replace(/^https?:\/\//, "")}`;
+        process.env.AUTH_URL = cleanUrl;
+        process.env.NEXTAUTH_URL = cleanUrl;
+      }
+    }
+
     // Authenticate and issue session cookie via NextAuth
     await signIn("credentials", {
       email,
