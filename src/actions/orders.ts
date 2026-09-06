@@ -8,6 +8,13 @@ import { generateOrderNumber } from "@/lib/utils";
 
 type ActionResult<T = null> = { success: true; data?: T } | { success: false; error: string };
 
+export function calculatePaymentStatus(totalAmount: number, advancePayment: number): "unpaid" | "partial" | "paid" {
+  if (totalAmount <= 0) return "paid";
+  if (advancePayment >= totalAmount) return "paid";
+  if (advancePayment > 0) return "partial";
+  return "unpaid";
+}
+
 export async function createOrder(formData: any): Promise<ActionResult<{ id: string }>> {
   try {
     const tenantId = await getTenantId();
@@ -25,6 +32,7 @@ export async function createOrder(formData: any): Promise<ActionResult<{ id: str
     const subtotal = services.reduce((sum, s) => sum + s.quantity * s.rate, 0);
     const totalAmount = Math.max(0, subtotal - (discount || 0));
     const balanceAmount = Math.max(0, totalAmount - (advancePayment || 0));
+    const paymentStatus = calculatePaymentStatus(totalAmount, advancePayment || 0);
 
     const orderServices = services.map((s) => ({
       serviceType: s.serviceTypeId && s.serviceTypeId !== "other" && mongoose.Types.ObjectId.isValid(s.serviceTypeId)
@@ -49,6 +57,7 @@ export async function createOrder(formData: any): Promise<ActionResult<{ id: str
       totalAmount,
       advancePayment: advancePayment || 0,
       balanceAmount,
+      paymentStatus,
     });
 
     return { success: true, data: { id: order._id.toString() } };
@@ -60,6 +69,7 @@ export async function createOrder(formData: any): Promise<ActionResult<{ id: str
 
 export async function getOrders(filters?: {
   status?: string;
+  paymentStatus?: string;
   eventType?: string;
   search?: string;
 }): Promise<ActionResult<any[]>> {
@@ -72,6 +82,9 @@ export async function getOrders(filters?: {
     const query: any = { userId: tenantId };
     if (filters?.status && filters.status !== "all") {
       query.status = filters.status;
+    }
+    if (filters?.paymentStatus && filters.paymentStatus !== "all") {
+      query.paymentStatus = filters.paymentStatus;
     }
     if (filters?.eventType && filters.eventType !== "all") {
       query.eventType = filters.eventType;
@@ -88,21 +101,26 @@ export async function getOrders(filters?: {
       .sort({ createdAt: -1 })
       .lean();
 
-    const serialized = orders.map((o) => ({
-      _id: o._id.toString(),
-      orderNumber: o.orderNumber,
-      clientName: o.clientName,
-      clientPhone: o.clientPhone,
-      eventType: o.eventType,
-      customEventType: (o as any).customEventType || "",
-      eventDate: o.eventDate.toISOString(),
-      status: o.status,
-      totalAmount: o.totalAmount,
-      balanceAmount: o.balanceAmount,
-      servicesCount: o.services.length,
-      staffCount: o.assignedStaff.length,
-      createdAt: o.createdAt.toISOString(),
-    }));
+    const serialized = orders.map((o) => {
+      const paymentStatus = o.paymentStatus || calculatePaymentStatus(o.totalAmount, o.advancePayment || 0);
+      return {
+        _id: o._id.toString(),
+        orderNumber: o.orderNumber,
+        clientName: o.clientName,
+        clientPhone: o.clientPhone,
+        eventType: o.eventType,
+        customEventType: (o as any).customEventType || "",
+        eventDate: o.eventDate.toISOString(),
+        status: o.status,
+        totalAmount: o.totalAmount,
+        advancePayment: o.advancePayment || 0,
+        balanceAmount: o.balanceAmount ?? Math.max(0, o.totalAmount - (o.advancePayment || 0)),
+        paymentStatus,
+        servicesCount: o.services.length,
+        staffCount: o.assignedStaff.length,
+        createdAt: o.createdAt.toISOString(),
+      };
+    });
 
     return { success: true, data: serialized };
   } catch (error) {
@@ -120,6 +138,8 @@ export async function getOrder(id: string): Promise<ActionResult<any>> {
 
     const order = await Order.findOne({ _id: id, userId: tenantId }).lean();
     if (!order) return { success: false, error: "Order not found" };
+
+    const paymentStatus = order.paymentStatus || calculatePaymentStatus(order.totalAmount, order.advancePayment || 0);
 
     const serialized = {
       _id: order._id.toString(),
@@ -151,8 +171,9 @@ export async function getOrder(id: string): Promise<ActionResult<any>> {
       subtotal: order.subtotal,
       discount: order.discount,
       totalAmount: order.totalAmount,
-      advancePayment: order.advancePayment,
-      balanceAmount: order.balanceAmount,
+      advancePayment: order.advancePayment || 0,
+      balanceAmount: order.balanceAmount ?? Math.max(0, order.totalAmount - (order.advancePayment || 0)),
+      paymentStatus,
       notes: order.notes || "",
       createdAt: order.createdAt.toISOString(),
       updatedAt: order.updatedAt.toISOString(),
@@ -182,6 +203,7 @@ export async function updateOrder(id: string, formData: any): Promise<ActionResu
     const subtotal = services.reduce((sum, s) => sum + s.quantity * s.rate, 0);
     const totalAmount = Math.max(0, subtotal - (discount || 0));
     const balanceAmount = Math.max(0, totalAmount - (advancePayment || 0));
+    const paymentStatus = calculatePaymentStatus(totalAmount, advancePayment || 0);
 
     const orderServices = services.map((s) => ({
       serviceType: s.serviceTypeId && s.serviceTypeId !== "other" && mongoose.Types.ObjectId.isValid(s.serviceTypeId)
@@ -206,6 +228,7 @@ export async function updateOrder(id: string, formData: any): Promise<ActionResu
         totalAmount,
         advancePayment: advancePayment || 0,
         balanceAmount,
+        paymentStatus,
       }
     );
 
@@ -213,6 +236,31 @@ export async function updateOrder(id: string, formData: any): Promise<ActionResu
   } catch (error) {
     console.error("Error updating order:", error);
     return { success: false, error: "Failed to update order" };
+  }
+}
+
+export async function updateOrderPayment(id: string, advancePayment: number): Promise<ActionResult> {
+  try {
+    const tenantId = await getTenantId();
+    if (!tenantId) return { success: false, error: "Unauthorized" };
+
+    await connectDB();
+    const order = await Order.findOne({ _id: id, userId: tenantId });
+    if (!order) return { success: false, error: "Order not found" };
+
+    const safePayment = Math.max(0, Number(advancePayment) || 0);
+    const balanceAmount = Math.max(0, order.totalAmount - safePayment);
+    const paymentStatus = calculatePaymentStatus(order.totalAmount, safePayment);
+
+    order.advancePayment = safePayment;
+    order.balanceAmount = balanceAmount;
+    order.paymentStatus = paymentStatus;
+    await order.save();
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error updating order payment:", error);
+    return { success: false, error: "Failed to update payment" };
   }
 }
 

@@ -37,6 +37,7 @@ export interface IOrder extends Document {
   totalAmount: number;
   advancePayment: number;
   balanceAmount: number;
+  paymentStatus: "unpaid" | "partial" | "paid";
   notes?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -87,6 +88,11 @@ const OrderSchema = new Schema<IOrder>(
     totalAmount: { type: Number, required: true, min: 0 },
     advancePayment: { type: Number, default: 0, min: 0 },
     balanceAmount: { type: Number, default: 0, min: 0 },
+    paymentStatus: {
+      type: String,
+      enum: ["unpaid", "partial", "paid"],
+      default: "unpaid",
+    },
     notes: { type: String, default: "", trim: true },
   },
   {
@@ -96,6 +102,7 @@ const OrderSchema = new Schema<IOrder>(
 
 OrderSchema.index({ userId: 1, createdAt: -1 });
 OrderSchema.index({ userId: 1, status: 1 });
+OrderSchema.index({ userId: 1, paymentStatus: 1 });
 OrderSchema.index({ userId: 1, eventDate: 1 });
 
 export const Order: Model<IOrder> =

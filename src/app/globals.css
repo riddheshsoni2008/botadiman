@@ -5,11 +5,11 @@
 /* Custom Studio Theme Utilities */
 @layer base {
   * {
-    border-color: theme(colors.slate.200);
+    border-color: var(--color-slate-200);
   }
 
   .dark * {
-    border-color: theme(colors.slate.800);
+    border-color: var(--color-slate-800);
   }
 }
 

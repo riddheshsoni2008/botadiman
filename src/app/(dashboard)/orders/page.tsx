@@ -40,16 +40,18 @@ export default function OrdersPage() {
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("all");
+  const [paymentFilter, setPaymentFilter] = useState("all");
   const [search, setSearch] = useState("");
 
   useEffect(() => {
     loadOrders();
-  }, [statusFilter, search]);
+  }, [statusFilter, paymentFilter, search]);
 
   async function loadOrders() {
     setLoading(true);
     const res = await getOrders({
       status: statusFilter,
+      paymentStatus: paymentFilter !== "all" ? paymentFilter : undefined,
       search: search || undefined,
     });
     if (res.success && res.data) setOrders(res.data);
@@ -84,6 +86,16 @@ export default function OrdersPage() {
             className="pl-10"
           />
         </div>
+        <select
+          value={paymentFilter}
+          onChange={(e) => setPaymentFilter(e.target.value)}
+          className="px-3.5 py-2 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-sm"
+        >
+          <option value="all">All Payment Status</option>
+          <option value="unpaid">⚠️ Unpaid</option>
+          <option value="partial">⏳ Partially Paid</option>
+          <option value="paid">✓ Paid in Full</option>
+        </select>
       </div>
 
       {/* Status Tabs */}
@@ -143,6 +155,22 @@ export default function OrdersPage() {
                           <Badge variant={statusVariants[order.status] || "secondary"}>
                             {order.status.replace("_", " ")}
                           </Badge>
+                          <Badge
+                            variant={
+                              order.paymentStatus === "paid"
+                                ? "success"
+                                : order.paymentStatus === "partial"
+                                ? "warning"
+                                : "destructive"
+                            }
+                            className="text-[10px]"
+                          >
+                            {order.paymentStatus === "paid"
+                              ? "Paid"
+                              : order.paymentStatus === "partial"
+                              ? "Partial"
+                              : "Unpaid"}
+                          </Badge>
                         </div>
                         <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
                           {order.orderNumber} • {order.eventType === "other" && order.customEventType ? order.customEventType : eventLabels[order.eventType] || order.eventType} •{" "}
@@ -157,9 +185,13 @@ export default function OrdersPage() {
                       <p className="text-lg font-bold text-slate-800 dark:text-slate-200">
                         {formatCurrency(order.totalAmount)}
                       </p>
-                      {order.balanceAmount > 0 && (
+                      {order.balanceAmount > 0 ? (
                         <p className="text-xs text-amber-600 dark:text-amber-400 font-medium">
                           Balance: {formatCurrency(order.balanceAmount)}
+                        </p>
+                      ) : (
+                        <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                          ✓ Paid in full
                         </p>
                       )}
                     </div>
