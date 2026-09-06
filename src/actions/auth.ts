@@ -16,22 +16,50 @@ export async function loginUser(formData: { email: string; password: string }): 
       return { success: false, error: validated.error.issues[0].message };
     }
 
+    const email = validated.data.email.toLowerCase().trim();
+    const password = validated.data.password;
+
+    // Check account and password in DB first for immediate clear feedback
+    await connectDB();
+    const user = await User.findOne({ email }).select("+passwordHash");
+
+    if (!user || !user.passwordHash) {
+      return { success: false, error: "No account found with this email address." };
+    }
+
+    const passwordMatch = await bcrypt.compare(password, user.passwordHash);
+    if (!passwordMatch) {
+      return { success: false, error: "Incorrect password. Please try again." };
+    }
+
+    // Authenticate and issue session cookie via NextAuth
     await signIn("credentials", {
-      email: validated.data.email,
-      password: validated.data.password,
+      email,
+      password,
       redirect: false,
     });
 
     return { success: true };
   } catch (error: any) {
-    if (error?.type === "CredentialsSignin" || error?.message?.includes("CredentialsSignin")) {
-      return { success: false, error: "Invalid email or password" };
-    }
-    // NextAuth redirect error is expected on success
-    if (error?.message?.includes("NEXT_REDIRECT")) {
+    // Next.js redirect errors are expected on successful authentication
+    if (
+      error?.message?.includes("NEXT_REDIRECT") ||
+      error?.digest?.startsWith("NEXT_REDIRECT")
+    ) {
       return { success: true };
     }
-    return { success: false, error: "Login failed. Please try again." };
+
+    if (
+      error?.name === "CredentialsSignin" ||
+      error?.type === "CredentialsSignin" ||
+      error?.message?.includes("CredentialsSignin") ||
+      error?.cause?.err?.name === "CredentialsSignin"
+    ) {
+      return { success: false, error: "Invalid email or password." };
+    }
+
+    console.error("Login authentication error:", error);
+    return { success: false, error: error?.message || "Login failed. Please try again." };
   }
 }
 
