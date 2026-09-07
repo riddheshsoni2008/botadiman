@@ -6,12 +6,13 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatCurrency(amount: number): string {
+export function formatCurrency(amount?: number | null): string {
+  const num = typeof amount === "number" && !Number.isNaN(amount) ? amount : 0;
   return new Intl.NumberFormat("en-IN", {
     style: "currency",
     currency: "INR",
     maximumFractionDigits: 0,
-  }).format(amount);
+  }).format(num);
 }
 
 export function formatDate(date: string | Date | number, formatStr: string = "dd MMM yyyy"): string {

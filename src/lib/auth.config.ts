@@ -66,6 +66,8 @@ export const authConfig: NextAuthConfig = {
       if (user) {
         token.id = user.id;
         token.role = (user as any).role;
+        token.ownerId = (user as any).ownerId;
+        token.studioName = (user as any).studioName;
       }
       return token;
     },
@@ -73,6 +75,8 @@ export const authConfig: NextAuthConfig = {
       if (token && session.user) {
         session.user.id = token.id as string;
         (session.user as any).role = token.role as "admin" | "staff";
+        (session.user as any).ownerId = token.ownerId as string | null | undefined;
+        (session.user as any).studioName = token.studioName as string | undefined;
       }
       return session;
     },

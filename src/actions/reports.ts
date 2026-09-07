@@ -15,8 +15,12 @@ interface DashboardMetrics {
   periodRevenue: number;
   periodOrdersCount: number;
   periodExpenses: number;
+  periodProfit: number;
+  periodMargin: number;
   totalOrders: number;
   pendingEstimates: number;
+  estimatesCount: number;
+  estimatesValue: number;
   upcomingShoots: any[];
   recentOrders: any[];
 }
@@ -63,7 +67,7 @@ export async function getDashboardMetrics(
       periodRevenueAgg,
       periodExpensesAgg,
       totalOrdersCount,
-      pendingEstimatesCount,
+      estimatesAgg,
       upcomingShoots,
       recentOrders,
     ] = await Promise.all([
@@ -93,7 +97,16 @@ export async function getDashboardMetrics(
         },
       ]),
       Order.countDocuments({ userId: tenantId }),
-      Order.countDocuments({ userId: tenantId, status: "estimate" }),
+      Order.aggregate([
+        { $match: { userId: tenantId, status: "estimate" } },
+        {
+          $group: {
+            _id: null,
+            totalValue: { $sum: "$totalAmount" },
+            count: { $sum: 1 },
+          },
+        },
+      ]),
       Order.find({
         userId: tenantId,
         eventDate: { $gte: now },
@@ -110,21 +123,32 @@ export async function getDashboardMetrics(
         .lean(),
     ]);
 
+    const periodRevenue = Number(periodRevenueAgg[0]?.totalAmount) || 0;
+    const periodExpenses = Number(periodExpensesAgg[0]?.totalAmount) || 0;
+    const periodProfit = periodRevenue - periodExpenses;
+    const periodMargin = periodRevenue > 0 ? Math.round((periodProfit / periodRevenue) * 100) : 0;
+    const estimatesCount = Number(estimatesAgg[0]?.count) || 0;
+    const estimatesValue = Number(estimatesAgg[0]?.totalValue) || 0;
+
     return {
       success: true,
       data: {
         periodLabel: label,
-        periodRevenue: periodRevenueAgg[0]?.totalAmount || 0,
+        periodRevenue,
         periodOrdersCount: periodRevenueAgg[0]?.count || 0,
-        periodExpenses: periodExpensesAgg[0]?.totalAmount || 0,
+        periodExpenses,
+        periodProfit,
+        periodMargin,
         totalOrders: totalOrdersCount,
-        pendingEstimates: pendingEstimatesCount,
+        pendingEstimates: estimatesCount,
+        estimatesCount,
+        estimatesValue,
         upcomingShoots: upcomingShoots.map((s: any) => ({
           _id: s._id.toString(),
           orderNumber: s.orderNumber,
           clientName: s.clientName,
           eventType: s.eventType,
-          eventDate: s.eventDate.toISOString(),
+          eventDate: s.eventDate ? s.eventDate.toISOString() : new Date().toISOString(),
           venue: s.venue || "",
           staffCount: s.assignedStaff?.length || 0,
         })),
@@ -133,9 +157,9 @@ export async function getDashboardMetrics(
           orderNumber: o.orderNumber,
           clientName: o.clientName,
           eventType: o.eventType,
-          totalAmount: o.totalAmount,
+          totalAmount: Number(o.totalAmount) || 0,
           status: o.status,
-          createdAt: o.createdAt.toISOString(),
+          createdAt: o.createdAt ? o.createdAt.toISOString() : new Date().toISOString(),
         })),
       },
     };

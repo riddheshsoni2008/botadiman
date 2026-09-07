@@ -15,8 +15,7 @@ export default async function DashboardLayout({
     redirect("/login");
   }
 
-  const settingsResult = await getStudioSettings();
-  const studioName = settingsResult.success ? settingsResult.data?.studioName : "Botadi";
+  const studioName = (session.user as any).studioName || "Botadi Studio";
 
   return (
     <div className="flex min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased transition-colors duration-200">

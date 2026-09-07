@@ -7,8 +7,21 @@ export async function getTenantId(): Promise<mongoose.Types.ObjectId | null> {
   const session = await auth();
   if (!session?.user?.id) return null;
 
-  const userObjId = new mongoose.Types.ObjectId(session.user.id);
+  const role = (session.user as any).role;
+  const ownerId = (session.user as any).ownerId;
 
+  // Fast path: for admins/owners, tenantId is their own userId directly (no DB roundtrip needed!)
+  if (role === "admin" || (!role && !ownerId)) {
+    return new mongoose.Types.ObjectId(session.user.id);
+  }
+
+  // Fast path: for staff with ownerId already in session token
+  if (role === "staff" && ownerId) {
+    return new mongoose.Types.ObjectId(ownerId);
+  }
+
+  // Fallback for older sessions or edge cases:
+  const userObjId = new mongoose.Types.ObjectId(session.user.id);
   await connectDB();
 
   const user = await User.findById(userObjId).select("ownerId role").lean();

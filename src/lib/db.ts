@@ -14,16 +14,22 @@ if (!cached) {
 }
 
 export async function connectDB() {
-  if (cached.conn) {
+  if (mongoose.connection.readyState === 1) {
+    return mongoose;
+  }
+
+  if (cached.conn && cached.conn.connection.readyState === 1) {
     return cached.conn;
   }
 
   if (!cached.promise) {
-    const opts = {
+    const opts: mongoose.ConnectOptions = {
       bufferCommands: false,
       maxPoolSize: 10,
-      serverSelectionTimeoutMS: 15000,
+      minPoolSize: 2,
+      serverSelectionTimeoutMS: 5000,
       socketTimeoutMS: 45000,
+      heartbeatFrequencyMS: 10000,
     };
 
     cached.promise = mongoose.connect(MONGODB_URI, opts).then((m) => {
