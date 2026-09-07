@@ -35,3 +35,14 @@ export function generateOrderNumber(): string {
   const random = Math.floor(Math.random() * 10000).toString().padStart(4, "0");
   return `BTD-${year}${month}-${random}`;
 }
+
+export function calculatePaymentStatus(
+  totalAmount: number,
+  advancePayment: number
+): "unpaid" | "partial" | "paid" {
+  if (totalAmount <= 0) return "paid";
+  if (advancePayment >= totalAmount) return "paid";
+  if (advancePayment > 0) return "partial";
+  return "unpaid";
+}
+

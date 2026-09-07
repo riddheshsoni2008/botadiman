@@ -4,16 +4,9 @@ import { connectDB } from "@/lib/db";
 import { Order } from "@/models/Order";
 import { getTenantId } from "@/lib/tenant";
 import { orderSchema } from "@/lib/validators/order";
-import { generateOrderNumber } from "@/lib/utils";
+import { generateOrderNumber, calculatePaymentStatus } from "@/lib/utils";
 
 type ActionResult<T = null> = { success: true; data?: T } | { success: false; error: string };
-
-export function calculatePaymentStatus(totalAmount: number, advancePayment: number): "unpaid" | "partial" | "paid" {
-  if (totalAmount <= 0) return "paid";
-  if (advancePayment >= totalAmount) return "paid";
-  if (advancePayment > 0) return "partial";
-  return "unpaid";
-}
 
 export async function createOrder(formData: any): Promise<ActionResult<{ id: string }>> {
   try {
